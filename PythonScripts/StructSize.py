@@ -166,7 +166,7 @@ def GetTypeSizeAtPos(CursorPos):
     if ProcessedLine == "":
         return
 
-    ProcessedLine = RemoveComments(ProcessedLine)
+    ProcessedLine = RemoveComments(ProcessedLine).strip()
     
     Size     = 0
     Types    = []
@@ -191,9 +191,18 @@ def GetTypeSizeAtPos(CursorPos):
 
                 if SymbolAtCursor == "Variable" or SymbolAtCursor == "FunctionArg":
                     VarDefinition = Ed.GetSymbolDefinition((CursorPosX, CursorPosY))
-                    # Extract parameter list
+                    if ProcessedLine.find("{") and VarDefinition != "":
+                        # void foo(int v0, char v1, wchar_t p) { int c = 1; wchar_t f; }
+                        #                                                           ^
+                        #                                                 we are here
+                        ToExtract = VarDefinition
+
                     CloseBracket = ProcessedLine.find(')')
                     if CloseBracket != -1:
+                        # void sbx_lua_check_and_call(lua_State** state, const char* func_name) {}
+                        #                                                            ^
+                        # if we are here, we want "ToExtract" to be: "const char* func_name"
+
                         Params = ProcessedLine[OpenBracket+1:CloseBracket].split(',')
                         # Find which parameter contains our cursor
                         ParamStart = OpenBracket + 1
@@ -203,8 +212,6 @@ def GetTypeSizeAtPos(CursorPos):
                                 ToExtract = Param.strip()
                                 break
                             ParamStart = ParamEnd + 1  # +1 for comma
-                    elif VarDefinition != "":
-                        ToExtract = VarDefinition
                     
         else:
             # Allow  this to work: long long f = 4; char ad = "c";
