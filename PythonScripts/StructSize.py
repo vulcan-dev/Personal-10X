@@ -170,7 +170,7 @@ def LocateSize(CursorPos):
         if SymbolType == "Typedef":
             ProcessedLine = SymbolDef
             Size = ExtractInfoFromLine(ProcessedLine, IsTypedef=True)
-        elif SymbolType == "Variable":
+        elif SymbolType == "Variable" or SymbolType == "MemberVariable":
             ToExtract = ""
 
             OpenBracket = ProcessedLine.find('(')
@@ -179,7 +179,13 @@ def LocateSize(CursorPos):
                 Start = OpenBracket-1 # Todo: Actually find the start, it might be "void foo ("
                 Type = Ed.GetSymbolType((OpenBracket-1, CursorPosY))
                 if Type == "FunctionDefinition":
-                    pass
+                    # This for example: void foo(int v0, char v1, wchar_t p) { int c = 1; wchar_t f = 2; }
+                    CursorPosX, CursorPosY = Ed.GetCursorPos()
+                    SymbolAtCursor = Ed.GetSymbolType((CursorPosX, CursorPosY))
+                    
+                    if SymbolAtCursor == "Variable":
+                        VarDefinition = Ed.GetSymbolDefinition((CursorPosX, CursorPosY))
+                        ToExtract = VarDefinition
             else:
                 # Allow  this to work: long long f = 4; char ad = "c";
                 Split = ProcessedLine.split(";")[:-1]
