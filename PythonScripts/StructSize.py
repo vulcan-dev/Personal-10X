@@ -4,7 +4,8 @@ from N10X import Editor as Ed
 ARCH_MAX_INT = 8
 IS_GCC_OLDER_THAN_14_2 = False # Only change this if it's true, and if you're using GCC.
 
-# This is very hacky and has a lot of edge cases.
+# This is very hacky and has some edge cases.
+# TODO: Rewrite this now that I've learned some things
 
 ############################################################
 ########## Notes
