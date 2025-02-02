@@ -94,10 +94,8 @@ def CalculateTypePositionsInLine(Line, Types):
 def GetWordInLineFromCursorPosition(Line):
     CursorPosX, _ = Ed.GetCursorPos()
 
-    Start = Line.rfind(' ', 0, CursorPosX) + 1
-    End = Line.find(' ', CursorPosX)
-    if End == -1:  # No space found after cursor
-        End = len(Line)
+    Start = max(Line.rfind(' ', 0, CursorPosX), Line.rfind('(', 0, CursorPosX)) + 1
+    End = min((pos for pos in (Line.find(' ', CursorPosX), Line.find('(', CursorPosX), Line.find(')', CursorPosX)) if pos != -1), default=len(Line))
     return Line[Start:End]
 
 def ExtractInfoFromLine(Line, IsTypedef=False, IsVariable=False, TypeToAdd=None):
@@ -145,9 +143,7 @@ def ExtractInfoFromLine(Line, IsTypedef=False, IsVariable=False, TypeToAdd=None)
                 _, LinePosition = Ed.GetCursorPos()
                 TypePosition = TypePositions[Type]
                 Definition = Ed.GetSymbolDefinition((TypePosition, LinePosition))
-                if Definition != "":
-                    print("AH")
-                    Size += ExtractInfoFromLine(Definition, IsTypedef=True, TypeToAdd=Type)
+                Size += ExtractInfoFromLine(Definition, IsTypedef=True, TypeToAdd=Type)
 
     return Size
 
