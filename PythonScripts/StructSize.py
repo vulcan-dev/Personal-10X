@@ -110,6 +110,9 @@ def RemoveComments(Line):
     return Line
 
 def ExtractInfoFromLine(Line, IsTypedef=False, IsVariable=False, TypeToAdd=None):
+    if Line == "":
+        return 0
+
     # Now handle the actual declaration
     Declaration = Line.split("=")[0].strip()
     Parts = Declaration.split()
