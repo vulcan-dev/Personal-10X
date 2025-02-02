@@ -4,7 +4,7 @@ from N10X import Editor as Ed
 ARCH_MAX_INT = 8
 IS_GCC_OLDER_THAN_14_2 = False # Only change this if it's true, and if you're using GCC.
 
-# This was a pain to write.
+# This is very hacky and has a lot of edge cases.
 
 ############################################################
 ########## Notes
@@ -98,7 +98,18 @@ def GetWordInLineFromCursorPosition(Line):
     End = min((pos for pos in (Line.find(' ', CursorPosX), Line.find('(', CursorPosX), Line.find(')', CursorPosX)) if pos != -1), default=len(Line))
     return Line[Start:End]
 
+def RemoveComments(Line):
+    CommentPos = Line.find("//")
+    if CommentPos != -1:
+        Line = Line[:CommentPos]
+    
+    MultiCommentPos = Line.find("/*")
+    if MultiCommentPos != -1:
+        Line = Line[:MultiCommentPos]
+    return Line
+
 def ExtractInfoFromLine(Line, IsTypedef=False, IsVariable=False, TypeToAdd=None):
+    # Now handle the actual declaration
     Declaration = Line.split("=")[0].strip()
     Parts = Declaration.split()
     Types = Parts[:-1]
@@ -130,7 +141,9 @@ def ExtractInfoFromLine(Line, IsTypedef=False, IsVariable=False, TypeToAdd=None)
                 if SymbolPosition[0] != -1 and SymbolPosition[1] != -1:
                     Definition = Ed.GetSymbolDefinition(SymbolPosition)
                     if Definition != "": # Maybe something doesn't exist, like lua_State
+                        Definition = RemoveComments(Definition)
                         Size = ExtractInfoFromLine(Definition, IsTypedef=True)
+                    break
 
         return Size
     # We pressed on a variable
@@ -156,6 +169,8 @@ def LocateSize(CursorPos):
     ProcessedLine = Ed.GetPreprocessedLine()
     if ProcessedLine == "":
         return
+
+    ProcessedLine = RemoveComments(ProcessedLine)
     
     Size     = 0
     Types    = []
@@ -163,48 +178,61 @@ def LocateSize(CursorPos):
 
     Word = GetWordInLineFromCursorPosition(ProcessedLine)
     
-    if SymbolDef != "":
-        if SymbolType == "Typedef":
-            ProcessedLine = SymbolDef
-            Size = ExtractInfoFromLine(ProcessedLine, IsTypedef=True)
-        elif SymbolType == "Variable" or SymbolType == "MemberVariable":
-            ToExtract = ""
+    if SymbolType == "Typedef":
+        ProcessedLine = SymbolDef
+        Size = ExtractInfoFromLine(ProcessedLine, IsTypedef=True)
+    elif SymbolType in ["Variable", "MemberVariable", "FunctionArg"]:
+        ToExtract = ""
 
-            OpenBracket = ProcessedLine.find('(')
-            if OpenBracket != -1: # Function
-                _, CursorPosY = Ed.GetCursorPos()
-                Start = OpenBracket-1 # Todo: Actually find the start, it might be "void foo (" #
-                Type = Ed.GetSymbolType((OpenBracket-1, CursorPosY))
-                if Type == "FunctionDefinition":
-                    # This for example: void foo(int v0, char v1, wchar_t p) { int c = 1; wchar_t f = 2; }
-                    CursorPosX, CursorPosY = Ed.GetCursorPos()
-                    SymbolAtCursor = Ed.GetSymbolType((CursorPosX, CursorPosY))
-                    
-                    if SymbolAtCursor == "Variable":
-                        VarDefinition = Ed.GetSymbolDefinition((CursorPosX, CursorPosY))
+        OpenBracket = ProcessedLine.find('(')
+        if OpenBracket != -1: # Function
+            _, CursorPosY = Ed.GetCursorPos()
+            Start = OpenBracket-1 
+            Type = Ed.GetSymbolType((OpenBracket-1, CursorPosY))
+            if Type == "FunctionDefinition" or Type == "InlineMemberFunctionDefinition" or Type == "FunctionDeclaration":
+                CursorPosX, CursorPosY = Ed.GetCursorPos()
+                SymbolAtCursor = Ed.GetSymbolType((CursorPosX, CursorPosY))
+                
+                if SymbolAtCursor == "Variable" or SymbolAtCursor == "FunctionArg":
+                    VarDefinition = Ed.GetSymbolDefinition((CursorPosX, CursorPosY))
+                    if VarDefinition != "":
                         ToExtract = VarDefinition
-            else:
-                # Allow  this to work: long long f = 4; char ad = "c";
-                Split = ProcessedLine.split(";")[:-1]
-                ToExtract = Split[0]
-            
-                for i, Section in enumerate(Split):
-                    if Word in Section:
-                        ToExtract = Split[i]
-                        break
-            
-            if '*' in ToExtract:
-                Size = ARCH_MAX_INT
-            else:
-                Size = ExtractInfoFromLine(ToExtract, IsVariable=True)
+                    else:
+                        # Extract parameter list
+                        CloseBracket = ProcessedLine.find(')')
+                        if CloseBracket != -1:
+                            Params = ProcessedLine[OpenBracket+1:CloseBracket].split(',')
+                            # Find which parameter contains our cursor
+                            ParamStart = OpenBracket + 1
+                            for Param in Params:
+                                ParamEnd = ParamStart + len(Param)
+                                if ParamStart <= CursorPosX <= ParamEnd:
+                                    ToExtract = Param.strip()
+                                    break
+                                ParamStart = ParamEnd + 1  # +1 for comma
+                    
         else:
-            return
+            # Allow  this to work: long long f = 4; char ad = "c";
+            Split = ProcessedLine.split(";")[:-1]
+            ToExtract = Split[0]
+        
+            for i, Section in enumerate(Split):
+                if Word in Section:
+                    ToExtract = Split[i]
+                    break
+        
+        if '*' in ToExtract:
+            Size = ARCH_MAX_INT
+        else:
+            Size = ExtractInfoFromLine(ToExtract, IsVariable=True)
     else:
+        if SymbolType != "None":
+            print(SymbolType)
         # We have the cursor position, and we have the line. Get the current word and get the type
         #               long long d=4;
         #    we might be ^ or ^, so let's find the word
 
-        if Word[len(Word)-1] == "*":
+        if len(Word)-1 > 0 and (Word[len(Word)-1] == "*" or Word[len(Word)-1] == "&"):
             Size = ARCH_MAX_INT
         else:
             if Word in SymbolMap:
