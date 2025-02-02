@@ -13,10 +13,14 @@ typedef double             f64;
 
 typedef   f64             test; typedef f32 test_2;
 
+typedef bool b8;
+
 struct MyStruct {
     int abc;
 } MyStruct;
 
+typedef struct lua_State lua_State;
+void sbx_lua_check_and_call(lua_State** state, const char* func_name) {}
 void foo(int v0, char v1, wchar_t p) { int c = 1; wchar_t f = 2; }
 
 int main() {

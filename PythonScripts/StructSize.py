@@ -124,12 +124,13 @@ def ExtractInfoFromLine(Line, IsTypedef=False, IsVariable=False, TypeToAdd=None)
                 SymbolMap[TypeToAdd] = SymbolMap[Type]
                 Size += SymbolMap[TypeToAdd]
             else:
-                # We are now here: typedef   f64             test;
+                # We are now here: typedef   type             test;
                 #                            ^
                 SymbolPosition = FindSymbolByName(Type)
                 if SymbolPosition[0] != -1 and SymbolPosition[1] != -1:
                     Definition = Ed.GetSymbolDefinition(SymbolPosition)
-                    Size = ExtractInfoFromLine(Definition, IsTypedef=True)
+                    if Definition != "": # Maybe something doesn't exist, like lua_State
+                        Size = ExtractInfoFromLine(Definition, IsTypedef=True)
 
         return Size
     # We pressed on a variable
@@ -172,7 +173,7 @@ def LocateSize(CursorPos):
             OpenBracket = ProcessedLine.find('(')
             if OpenBracket != -1: # Function
                 _, CursorPosY = Ed.GetCursorPos()
-                Start = OpenBracket-1 # Todo: Actually find the start, it might be "void foo ("
+                Start = OpenBracket-1 # Todo: Actually find the start, it might be "void foo (" #
                 Type = Ed.GetSymbolType((OpenBracket-1, CursorPosY))
                 if Type == "FunctionDefinition":
                     # This for example: void foo(int v0, char v1, wchar_t p) { int c = 1; wchar_t f = 2; }
@@ -192,7 +193,10 @@ def LocateSize(CursorPos):
                         ToExtract = Split[i]
                         break
             
-            Size = ExtractInfoFromLine(ToExtract, IsVariable=True)
+            if '*' in ToExtract:
+                Size = ARCH_MAX_INT
+            else:
+                Size = ExtractInfoFromLine(ToExtract, IsVariable=True)
         else:
             return
     else:
@@ -200,10 +204,13 @@ def LocateSize(CursorPos):
         #               long long d=4;
         #    we might be ^ or ^, so let's find the word
 
-        if Word in SymbolMap:
-            Size = SymbolMap[Word]
+        if Word[len(Word)-1] == "*":
+            Size = ARCH_MAX_INT
         else:
-            Size = 0
+            if Word in SymbolMap:
+                Size = SymbolMap[Word]
+            else:
+                Size = 0
 
     if Size >= ARCH_MAX_INT:
         Size = ARCH_MAX_INT
