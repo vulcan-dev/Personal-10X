@@ -23,6 +23,16 @@ Language C
 
 Restrictions:
   - The custom types must be in the same file unless you have already added them to the map by clicking on it or a variable
+
+Issues:
+```
+void foo() { int c = 1; }
+                 ^
+will result in the types: ['void', 'foo()', '{', 'int']
+this means it will call `ExtractInfoFromLine`
+```
+
+
 """
 
 IS_DRAGGING = False
@@ -100,7 +110,11 @@ def ExtractInfoFromLine(Line, IsTypedef=False, IsVariable=False, TypeToAdd=None)
 
     # We pressed on a typedef
     if IsTypedef:
-        Types = Types[1:] # Remove 'typedef' from the first index
+        if len(Types) >= 2 and (Types[1] == "signed" or Types[1] == "unsigned"):
+            Types = Types[2:] # typedef signed
+        else:
+            Types = Types[1:] # typedef
+
         if TypeToAdd is None:
             # Extract Name
             # ['typedef', 'double', 'f64']
@@ -114,7 +128,6 @@ def ExtractInfoFromLine(Line, IsTypedef=False, IsVariable=False, TypeToAdd=None)
             else:
                 # We are now here: typedef   f64             test;
                 #                            ^
-                # We need to GetSymbolDefinition, but we can't because we don't know the line.
                 SymbolPosition = FindSymbolByName(Type)
                 if SymbolPosition[0] != -1 and SymbolPosition[1] != -1:
                     Definition = Ed.GetSymbolDefinition(SymbolPosition)
@@ -132,7 +145,9 @@ def ExtractInfoFromLine(Line, IsTypedef=False, IsVariable=False, TypeToAdd=None)
                 _, LinePosition = Ed.GetCursorPos()
                 TypePosition = TypePositions[Type]
                 Definition = Ed.GetSymbolDefinition((TypePosition, LinePosition))
-                Size += ExtractInfoFromLine(Definition, IsTypedef=True, TypeToAdd=Type)
+                if Definition != "":
+                    print("AH")
+                    Size += ExtractInfoFromLine(Definition, IsTypedef=True, TypeToAdd=Type)
 
     return Size
 
@@ -156,15 +171,25 @@ def LocateSize(CursorPos):
             ProcessedLine = SymbolDef
             Size = ExtractInfoFromLine(ProcessedLine, IsTypedef=True)
         elif SymbolType == "Variable":
-            # Allow  this to work: long long f = 4; char ad = "c";
-            Split = ProcessedLine.split(";")[:-1]
-            ToExtract = Split[0]
+            ToExtract = ""
 
-            for i, Section in enumerate(Split):
-                if Word in Section:
-                    ToExtract = Split[i]
-                    break
-
+            OpenBracket = ProcessedLine.find('(')
+            if OpenBracket != -1: # Function
+                _, CursorPosY = Ed.GetCursorPos()
+                Start = OpenBracket-1 # Todo: Actually find the start, it might be "void foo ("
+                Type = Ed.GetSymbolType((OpenBracket-1, CursorPosY))
+                if Type == "FunctionDefinition":
+                    pass
+            else:
+                # Allow  this to work: long long f = 4; char ad = "c";
+                Split = ProcessedLine.split(";")[:-1]
+                ToExtract = Split[0]
+            
+                for i, Section in enumerate(Split):
+                    if Word in Section:
+                        ToExtract = Split[i]
+                        break
+            
             Size = ExtractInfoFromLine(ToExtract, IsVariable=True)
         else:
             return
