@@ -161,7 +161,7 @@ def ExtractInfoFromLine(Line, IsTypedef=False, IsVariable=False, TypeToAdd=None)
 
     return Size
 
-def LocateSize(CursorPos):
+def GetTypeSizeAtPos(CursorPos):
     SymbolType = Ed.GetSymbolType(CursorPos)
     SymbolDef = Ed.GetSymbolDefinition(CursorPos)
     if SymbolType == "":
@@ -193,6 +193,8 @@ def LocateSize(CursorPos):
                 CursorPosX, CursorPosY = Ed.GetCursorPos()
                 SymbolAtCursor = Ed.GetSymbolType((CursorPosX, CursorPosY))
                 
+                # I really need to refactor this with the new things I've found.. This is a bit of a mess :)
+                # Soon(tm)
                 if SymbolAtCursor == "Variable" or SymbolAtCursor == "FunctionArg":
                     VarDefinition = Ed.GetSymbolDefinition((CursorPosX, CursorPosY))
                     if VarDefinition != "":
@@ -240,13 +242,7 @@ def LocateSize(CursorPos):
             else:
                 Size = 0
 
-    if Size >= ARCH_MAX_INT:
-        Size = ARCH_MAX_INT
-
-    if Size > 0:
-        Ed.SetStatusBarText(f"{Size}bytes")
-    else:
-        Ed.SetStatusBarText("")
+    return Size
 
 def PrintSymbolSizes():
     print(SymbolMap)
@@ -262,7 +258,15 @@ def SZ_Update():
     if not IS_DRAGGING and LastCursor != CursorPos and Ed.GetCurrentFilename() and not Ed.IsCommandPanelOpen():
         # "and not Ed.IsCommandPanelOpen()" - Fix crash when opening command panel
         LastCursor = CursorPos
-        LocateSize(CursorPos)
+        Size = GetTypeSizeAtPos(CursorPos)
+        if Size is not None:
+            if Size >= ARCH_MAX_INT:
+                Size = ARCH_MAX_INT
+
+            if Size > 0:
+                Ed.SetStatusBarText(f"{Size}bytes")
+            else:
+                Ed.SetStatusBarText("")
 
 def SZ_MouseSelectStartedFunction(Pos):
     global IS_DRAGGING
