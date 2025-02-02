@@ -24,16 +24,6 @@ Language C
 
 Restrictions:
   - The custom types must be in the same file unless you have already added them to the map by clicking on it or a variable
-
-Issues:
-```
-void foo() { int c = 1; }
-                 ^
-will result in the types: ['void', 'foo()', '{', 'int']
-this means it will call `ExtractInfoFromLine`
-```
-
-
 """
 
 IS_DRAGGING = False
@@ -158,10 +148,12 @@ def ExtractInfoFromLine(Line, IsTypedef=False, IsVariable=False, TypeToAdd=None)
                 Size += SymbolMap[Type]
             # That type is not defined, let's find it
             else:
-                _, LinePosition = Ed.GetCursorPos()
-                TypePosition = TypePositions[Type]
-                Definition = Ed.GetSymbolDefinition((TypePosition, LinePosition))
-                Size += ExtractInfoFromLine(Definition, IsTypedef=True, TypeToAdd=Type)
+                SymbolPosition = FindSymbolByName(Type)
+                if SymbolPosition[0] != -1 and SymbolPosition[1] != -1:
+                    Definition = Ed.GetSymbolDefinition(SymbolPosition)
+                    if Definition != "": 
+                        Definition = RemoveComments(Definition)
+                        Size = ExtractInfoFromLine(Definition, IsTypedef=True, TypeToAdd=Type)
 
     return Size
 
@@ -181,7 +173,7 @@ def GetTypeSizeAtPos(CursorPos):
     Variable = ""
 
     Word = GetWordInLineFromCursorPosition(ProcessedLine)
-    
+
     if SymbolType == "Typedef":
         ProcessedLine = SymbolDef
         Size = ExtractInfoFromLine(ProcessedLine, IsTypedef=True)
@@ -196,26 +188,23 @@ def GetTypeSizeAtPos(CursorPos):
             if Type == "FunctionDefinition" or Type == "InlineMemberFunctionDefinition" or Type == "FunctionDeclaration":
                 CursorPosX, CursorPosY = Ed.GetCursorPos()
                 SymbolAtCursor = Ed.GetSymbolType((CursorPosX, CursorPosY))
-                
-                # I really need to refactor this with the new things I've found.. This is a bit of a mess :)
-                # Soon(tm)
+
                 if SymbolAtCursor == "Variable" or SymbolAtCursor == "FunctionArg":
                     VarDefinition = Ed.GetSymbolDefinition((CursorPosX, CursorPosY))
-                    if VarDefinition != "":
+                    # Extract parameter list
+                    CloseBracket = ProcessedLine.find(')')
+                    if CloseBracket != -1:
+                        Params = ProcessedLine[OpenBracket+1:CloseBracket].split(',')
+                        # Find which parameter contains our cursor
+                        ParamStart = OpenBracket + 1
+                        for Param in Params:
+                            ParamEnd = ParamStart + len(Param)
+                            if ParamStart <= CursorPosX <= ParamEnd:
+                                ToExtract = Param.strip()
+                                break
+                            ParamStart = ParamEnd + 1  # +1 for comma
+                    elif VarDefinition != "":
                         ToExtract = VarDefinition
-                    else:
-                        # Extract parameter list
-                        CloseBracket = ProcessedLine.find(')')
-                        if CloseBracket != -1:
-                            Params = ProcessedLine[OpenBracket+1:CloseBracket].split(',')
-                            # Find which parameter contains our cursor
-                            ParamStart = OpenBracket + 1
-                            for Param in Params:
-                                ParamEnd = ParamStart + len(Param)
-                                if ParamStart <= CursorPosX <= ParamEnd:
-                                    ToExtract = Param.strip()
-                                    break
-                                ParamStart = ParamEnd + 1  # +1 for comma
                     
         else:
             # Allow  this to work: long long f = 4; char ad = "c";
@@ -226,7 +215,7 @@ def GetTypeSizeAtPos(CursorPos):
                 if Word in Section:
                     ToExtract = Split[i]
                     break
-        
+
         if '*' in ToExtract:
             Size = ARCH_MAX_INT
         else:
